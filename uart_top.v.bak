@@ -1,0 +1,222 @@
+// UART Transmitter Module
+module uart_transmitter (
+    input wire        clock,       // System clock
+    input wire        tx_start,    // Start transmission
+    input wire [7:0]  DATA,        // Parallel data input
+    input wire        baud_tick,   // Baud rate clock enable
+    output reg        txd,         // Serial data output
+    output reg        tx_done      // Transmission complete
+);
+
+    localparam IDLE  = 3'b000;
+    localparam START = 3'b001;
+    localparam DATA  = 3'b010;
+    localparam STOP  = 3'b011;
+
+    reg [2:0] state;
+    reg [3:0] bit_counter;
+    reg [7:0] sbuf;
+
+    always @(posedge clock) begin
+        if (baud_tick) begin
+            case (state)
+                IDLE: begin
+                    txd <= 1;  // Idle state (high)
+                    tx_done <= 0;
+                    if (tx_start) begin
+                        sbuf <= DATA;  // Load data
+                        state <= START;
+                        bit_counter <= 0;
+                    end
+                end
+
+                START: begin
+                    txd <= 0;  // Start bit
+                    state <= DATA;
+                end
+
+                DATA: begin
+                    txd <= sbuf[bit_counter];
+                    if (bit_counter < 7)
+                        bit_counter <= bit_counter + 1;
+                    else
+                        state <= STOP;
+                end
+
+                STOP: begin
+                    txd <= 1;  // Stop bit
+                    tx_done <= 1;
+                    state <= IDLE;
+                end
+            endcase
+        end
+    end
+endmodule
+
+// UART Receiver Module
+module uart_receiver (
+    input wire       clock,        // System clock
+    input wire       rxd,          // Serial data input
+    input wire       baud_tick,    // Baud rate clock enable
+    output reg [7:0] DATA,         // Parallel data output
+    output reg       rx_done       // Reception complete
+);
+
+    localparam IDLE  = 3'b000;
+    localparam START = 3'b001;
+    localparam DATA  = 3'b010;
+    localparam STOP  = 3'b011;
+
+    reg [2:0] state;
+    reg [3:0] bit_counter;
+    reg [7:0] data_buffer;
+
+    always @(posedge clock) begin
+        if (baud_tick) begin
+            case (state)
+                IDLE: begin
+                    rx_done <= 0;
+                    if (!rxd) state <= START; // Detect start bit (low)
+                end
+
+                START: state <= DATA;
+
+                DATA: begin
+                    data_buffer[bit_counter] <= rxd;
+                    if (bit_counter < 7)
+                        bit_counter <= bit_counter + 1;
+                    else
+                        state <= STOP;
+                end
+
+                STOP: begin
+                    if (rxd) begin // Stop bit must be high
+                        DATA <= data_buffer;
+                        rx_done <= 1;
+                        state <= IDLE;
+                    end
+                end
+            endcase
+        end
+    end
+endmodule
+
+// Baud Rate Generator Module
+module baud_rate_generator (
+    input wire clock,        // System clock
+    input wire reset,        // Reset signal
+    output reg baud_tick     // Baud rate clock enable
+);
+
+    parameter BAUD_DIVISOR = 10416; // Example: For 9600 baud @ 100 MHz clock
+    reg [13:0] counter;
+
+    always @(posedge clock or posedge reset) begin
+        if (reset) begin
+            counter <= 0;
+            baud_tick <= 0;
+        end else begin
+            if (counter == BAUD_DIVISOR / 2 - 1) begin
+                baud_tick <= ~baud_tick;
+                counter <= 0;
+            end else
+                counter <= counter + 1;
+        end
+    end
+endmodule
+
+// Top-Level UART Module
+module uart_top (
+    input wire       clock,        // System clock
+    input wire       reset,        // Reset signal
+    input wire       tx_start,     // Start signal
+    input wire [7:0] DATA_IN,      // Input data
+    input wire       rxd,          // Serial input
+    output wire      txd,          // Serial output
+    output wire      tx_done,      // Transmit complete
+    output wire [7:0] DATA_OUT,    // Received data
+    output wire      rx_done       // Reception complete
+);
+
+    wire baud_tick;
+
+    baud_rate_generator BRG (
+        .clock(clock),
+        .reset(reset),
+        .baud_tick(baud_tick)
+    );
+
+    uart_transmitter TX (
+        .clock(clock),
+        .tx_start(tx_start),
+        .DATA(DATA_IN),
+        .baud_tick(baud_tick),
+        .txd(txd),
+        .tx_done(tx_done)
+    );
+
+    uart_receiver RX (
+        .clock(clock),
+        .rxd(rxd),
+        .baud_tick(baud_tick),
+        .DATA(DATA_OUT),
+        .rx_done(rx_done)
+    );
+endmodule
+
+// UART Transmitter Testbench
+module uart_transmitter_tb();
+    reg clock, tx_start;
+    reg [7:0] DATA;
+    wire txd, tx_done;
+
+    uart_transmitter uut (.clock(clock), .tx_start(tx_start), .DATA(DATA), .txd(txd), .tx_done(tx_done));
+
+    always #5 clock = ~clock; // 100 MHz clock
+
+    initial begin
+        clock = 0;
+        tx_start = 0;
+        DATA = 8'b10101010;
+
+        #10 tx_start = 1;  // Start transmission
+        #10 tx_start = 0;
+        #2000 $finish;
+    end
+endmodule
+
+// UART Top-Level Testbench
+module uart_top_tb();
+    reg clock, reset, tx_start, rxd;
+    reg [7:0] DATA_IN;
+    wire txd, tx_done, rx_done;
+    wire [7:0] DATA_OUT;
+
+    uart_top uut (
+        .clock(clock),
+        .reset(reset),
+        .tx_start(tx_start),
+        .DATA_IN(DATA_IN),
+        .rxd(txd),  // Loopback from txd
+        .txd(txd),
+        .DATA_OUT(DATA_OUT),
+        .tx_done(tx_done),
+        .rx_done(rx_done)
+    );
+
+    always #5 clock = ~clock;
+
+    initial begin
+        clock = 0;
+        reset = 1;
+        tx_start = 0;
+        DATA_IN = 8'h55; // Sample data
+
+        #10 reset = 0;
+        #10 tx_start = 1;
+        #10 tx_start = 0;
+
+        #1000 if (rx_done) $display("Data Received: %h", DATA_OUT);
+        #2000 $finish;
+    end
+endmodule
