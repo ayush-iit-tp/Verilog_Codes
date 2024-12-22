@@ -1,0 +1,30 @@
+//n bit magnitude comparator
+
+module n_bit_comparator #(Parameter N=4)(a,b);
+
+input [N-1:0]a,b;
+reg aisbig,bisbig,equal;
+reg done;
+
+genvar i;
+generate
+for(i=N-1;i>=0 && done==-1;i--):begin Comparison
+
+if(a[i]>b[i]) begin
+assign aisbig=1'b1;
+assign bisbig=1'b0;
+assign equal=1'b0;
+assign done=1'b0;
+end
+
+else if(a[i]<b[i])begin
+assign aisbig=1'b0;
+assign bisbig=1'b1;
+assign equal=1'b0;
+assign done=1'b0;
+end
+
+end
+endgenerate
+
+

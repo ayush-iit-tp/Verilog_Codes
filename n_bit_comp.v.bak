@@ -1,0 +1,24 @@
+module n_bit_comp
+#(parameter n= 4)
+(
+    input [n-1:0] a,
+    input [n-1:0] b,
+    output reg comp
+);
+integer i;
+always@(a,b)
+begin
+    assign comp=4'b3;
+    for(i=n-1;i>=0 && comp==4'd3;i=i-1)begin
+        if(a[i]>b[i])begin
+            comp=4'd1;
+        end
+        else if (a[i]<b[i]) begin
+            comp=4'd2;
+        end
+        else begin
+            comp=4'd0;
+        end
+    end
+end
+endmodule

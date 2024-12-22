@@ -1,0 +1,19 @@
+//module testBench
+module TB_jk_ff();
+
+reg x;
+reg A,B;
+wire Aout,Bout;
+jkff ff(.x(x),.A(A),.B(B),.Aout(Aout),.Bout(Bout));
+
+initial begin
+      x=1'b0;A=1'b0;B=1'b0;
+#100  x=1'b0;A=1'b0;B=1'b1;
+#100  x=1'b0;A=1'b1;B=1'b0;
+#100  x=1'b0;A=1'b1;B=1'b1;
+#100  x=1'b1;A=1'b0;B=1'b0;
+#100  x=1'b1;A=1'b0;B=1'b1;
+#100  x=1'b1;A=1'b1;B=1'b0;
+#100  x=1'b1;A=1'b1;B=1'b1;
+end
+
